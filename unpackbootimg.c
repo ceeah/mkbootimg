@@ -66,6 +66,105 @@ int usage()
     return 0;
 }
 
+/**
+ * Unpack the boot.img with verion 3 header. 
+ * f is expected to point to the start of the header
+ */
+int unpack_bootimg_v3(FILE *f, const char *directory, char *filename) {
+    char tmp[PATH_MAX];
+    boot_img_hdr_v3 header;
+
+    if(fread(&header, sizeof(header), 1, f)){};
+
+    printf("KERNEL_SIZE %u\n", header.kernel_size);
+    printf("RAMDISK_SIZE %u\n", header.ramdisk_size);
+
+    int a=0, b=0, c=0, y=0, m=0;
+
+    if (header.os_version != 0) {
+        int os_version,os_patch_level;
+        os_version = header.os_version >> 11;
+        os_patch_level = header.os_version&0x7ff;
+
+        a = (os_version >> 14)&0x7f;
+        b = (os_version >> 7)&0x7f;
+        c = os_version&0x7f;
+
+        y = (os_patch_level >> 4) + 2000;
+        m = os_patch_level&0xf;
+
+        if((a < 128) && (b < 128) && (c < 128) && (y >= 2000) && (y < 2128) && (m > 0) && (m <= 12)) {
+            printf("BOARD_OS_VERSION %d.%d.%d\n", a, b, c);
+            printf("BOARD_OS_PATCH_LEVEL %d-%02d\n", y, m);
+        } else {
+            header.os_version = 0;
+        }
+    }
+    
+    if (header.os_version != 0) {
+        //printf("os_version...\n");
+        sprintf(tmp, "%s/%s", directory, basename(filename));
+        strcat(tmp, "-os_version");
+        char osvertmp[200];
+        sprintf(osvertmp, "%d.%d.%d", a, b, c);
+        write_string_to_file(tmp, osvertmp);
+
+        //printf("os_patch_level...\n");
+        sprintf(tmp, "%s/%s", directory, basename(filename));
+        strcat(tmp, "-os_patch_level");
+        char oslvltmp[200];
+        sprintf(oslvltmp, "%d-%02d", y, m);
+        write_string_to_file(tmp, oslvltmp);
+    }
+
+    //printf("header_version...\n");
+    sprintf(tmp, "%s/%s", directory, basename(filename));
+    strcat(tmp, "-header_version");
+    char hdrvertmp[200];
+    sprintf(hdrvertmp, "%d\n", header.header_version);
+    write_string_to_file(tmp, hdrvertmp);
+
+    //printf("cmdline...\n");
+    sprintf(tmp, "%s/%s", directory, basename(filename));
+    strcat(tmp, "-cmdline");
+    char cmdlinetmp[BOOT_ARGS_SIZE+BOOT_EXTRA_ARGS_SIZE+1];
+    sprintf(cmdlinetmp, "%.*s", BOOT_ARGS_SIZE, header.cmdline);
+    cmdlinetmp[BOOT_ARGS_SIZE+BOOT_EXTRA_ARGS_SIZE]='\0';
+    write_string_to_file(tmp, cmdlinetmp);
+
+    //printf("total read: %d\n", header.kernel_size);
+    read_padding(f, header.header_size, 4096);
+
+    sprintf(tmp, "%s/%s", directory, basename(filename));
+    strcat(tmp, "-zImage");
+    FILE *k = fopen(tmp, "wb");
+    byte *kernel = (byte *)malloc(header.kernel_size);
+    //printf("Reading kernel...\n");
+    fseek(f, header.header_size - sizeof(header), SEEK_CUR);
+    if(fread(kernel, header.kernel_size, 1, f)){};
+    //total_read += header.kernel_size;
+    fwrite(kernel, header.kernel_size, 1, k);
+    fclose(k);
+
+    //printf("total read: %d\n", header.kernel_size);
+    read_padding(f, header.kernel_size, 4096);
+
+    sprintf(tmp, "%s/%s", directory, basename(filename));
+    strcat(tmp, "-ramdisk.gz");
+    FILE *r = fopen(tmp, "wb");
+    byte *ramdisk = (byte *)malloc(header.ramdisk_size);
+    //printf("Reading ramdisk...\n");
+    if(fread(ramdisk, header.ramdisk_size, 1, f)){};
+    //total_read += header.ramdisk_size;
+    fwrite(ramdisk, header.ramdisk_size, 1, r);
+    fclose(r);
+
+    fclose(f);
+
+    return 0;
+}
+
+
 int main(int argc, char **argv)
 {
     char tmp[PATH_MAX];
@@ -138,6 +237,14 @@ int main(int argc, char **argv)
     }
 
     if(fread(&header, sizeof(header), 1, f)){};
+
+    printf("HEADER_VERSION %u\n", header.header_version);
+
+    if (header.header_version == 3) {
+        fseek(f, i, SEEK_SET);
+        return unpack_bootimg_v3(f, directory, filename);
+    }
+
     base = header.kernel_addr - 0x00008000;
     printf("BOARD_KERNEL_CMDLINE %.*s%.*s\n", BOOT_ARGS_SIZE, header.cmdline, BOOT_EXTRA_ARGS_SIZE, header.extra_cmdline);
     printf("BOARD_KERNEL_BASE 0x%08x\n", base);
@@ -383,3 +490,4 @@ int main(int argc, char **argv)
     //printf("Total Read: %d\n", total_read);
     return 0;
 }
+

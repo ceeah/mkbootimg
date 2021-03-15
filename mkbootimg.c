@@ -483,8 +483,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if(write(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) goto fail;
-    if(write_padding(fd, pagesize, sizeof(hdr))) goto fail;
+    if (header_version == 3) {
+        boot_img_hdr_v3 hdr_v3 = {
+            .header_size = sizeof(boot_img_hdr_v3),
+            .header_version = 3,
+            .kernel_size = hdr.kernel_size,
+            .os_version = hdr.os_version,
+            .ramdisk_size = hdr.ramdisk_size
+        };
+        memcpy(hdr_v3.magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
+        strcpy(hdr_v3.cmdline, hdr.cmdline);
+        
+        pagesize = 4096;
+        header_sz = sizeof(boot_img_hdr_v3);
+        if(write(fd, &hdr_v3, sizeof(hdr_v3)) != sizeof(hdr_v3)) goto fail;
+    } else {
+        if(write(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) goto fail;
+    }
+
+    if(write_padding(fd, pagesize, header_sz)) goto fail;
 
     if(write(fd, kernel_data, hdr.kernel_size) != (ssize_t) hdr.kernel_size) goto fail;
     if(write_padding(fd, pagesize, hdr.kernel_size)) goto fail;

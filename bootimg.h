@@ -76,6 +76,7 @@ typedef struct boot_img_hdr_v0 boot_img_hdr;
 typedef struct boot_img_hdr_v0 boot_img_hdr_v0;
 typedef struct boot_img_hdr_v1 boot_img_hdr_v1;
 typedef struct boot_img_hdr_v2 boot_img_hdr_v2;
+typedef struct boot_img_hdr_v3 boot_img_hdr_v3;
 
 /* When a boot header is of version 0, the structure of boot image is as
  * follows:
@@ -285,3 +286,22 @@ struct boot_img_hdr_v2 {
  * 8. if second_size != 0: jump to second_addr
  *    else: jump to kernel_addr
  */
+
+struct boot_img_hdr_v3
+{
+#define BOOT_MAGIC_SIZE 8
+    uint8_t magic[BOOT_MAGIC_SIZE];
+
+    uint32_t kernel_size;    /* size in bytes */
+    uint32_t ramdisk_size;   /* size in bytes */
+
+    uint32_t os_version;
+
+    uint32_t header_size;    /* size of boot image header in bytes */
+    uint32_t reserved[4];
+    uint32_t header_version; /* offset remains constant for version check */
+
+#define BOOT_ARGS_SIZE 512
+#define BOOT_EXTRA_ARGS_SIZE 1024
+    uint8_t cmdline[BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE];
+};
